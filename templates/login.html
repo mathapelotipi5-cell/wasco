@@ -1,0 +1,35 @@
+{% extends 'base_public.html' %}
+{% block title %}Sign In | WASCO{% endblock %}
+{% block content %}
+<div class="login-shell">
+  <section class="login-showcase">
+    <div>
+      <div class="brand"><div class="brand-badge">W</div><div><div class="brand-title">WASCO</div><div class="brand-sub">Distributed Water Billing Platform</div></div></div>
+      <h1 style="font-size:3rem;line-height:1.05;margin:2rem 0 1rem">Secure access for customers, administrators, and branch managers.</h1>
+      <p style="color:#cbd5e1;max-width:720px;font-size:1.05rem">Sign in with a real account from the database to access your dashboard, billing records, customer services, and operational insights.</p>
+    </div>
+    <div class="grid-2">
+      <div class="glass-card"><strong>Admin</strong><div style="margin-top:.35rem;color:#e2e8f0">Operations, billing, payments, and customer records.</div></div>
+      <div class="glass-card"><strong>Customer</strong><div style="margin-top:.35rem;color:#e2e8f0">Bills, usage, notifications, and service reports.</div></div>
+      <div class="glass-card"><strong>Branch Manager</strong><div style="margin-top:.35rem;color:#e2e8f0">Analytics, branch insights, and distributed health monitoring.</div></div>
+      <div class="glass-card"><strong>Public Access</strong><div style="margin-top:.35rem;color:#e2e8f0">Return to the home page to browse services.</div></div>
+    </div>
+  </section>
+
+  <section class="login-panel-wrap">
+    <div class="login-panel">
+      <div class="eyebrow">Sign In</div>
+      <h1>Welcome back</h1>
+      <p class="muted">Choose your role and continue to the correct dashboard.</p>
+      <form method="post" style="margin-top:1.5rem">
+        <div class="field"><label for="role">Role</label><select id="role" name="role" class="input"><option value="ADMIN">Admin</option><option value="CUSTOMER">Customer</option><option value="MANAGER">Branch Manager</option></select></div>
+        <div class="field"><label for="username">Username</label><input id="username" name="username" class="input" type="text" placeholder="Enter username" required /></div>
+        <div class="field"><label for="password">Password</label><input id="password" name="password" class="input" type="password" placeholder="Enter password" required /></div>
+        <div class="login-note">Use real database accounts from the <strong>users</strong> table. The selected role must match the stored role for the account.</div>
+        <button class="btn btn-primary" style="width:100%;margin-top:1rem" type="submit">Login</button>
+        <a class="btn btn-outline-dark" href="{{ url_for('home') }}" style="width:100%;margin-top:.8rem;color:#0f172a">Back to Home</a>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

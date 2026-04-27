@@ -1,0 +1,7 @@
+{% extends 'base_public.html' %}
+{% block title %}Access Denied | WASCO{% endblock %}
+{% block content %}
+<div class="container" style="padding:4rem 0">
+  <div class="card panel"><h1 class="section-title">Access denied</h1><p class="muted">You do not have permission to access this page.</p><a href="{{ url_for('home') }}" class="btn btn-primary">Return Home</a></div>
+</div>
+{% endblock %}

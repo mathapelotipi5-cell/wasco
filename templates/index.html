@@ -1,0 +1,50 @@
+{% extends 'base_public.html' %}
+{% block title %}WASCO Water Billing System{% endblock %}
+{% block content %}
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div class="brand">
+      <div class="brand-badge">W</div>
+      <div>
+        <div class="brand-title">WASCO</div>
+        <div class="brand-sub">Water & Sewerage Services</div>
+      </div>
+    </div>
+    <nav class="nav-links">
+      <a href="#services">Services</a>
+      <a href="#features">Features</a>
+      <a href="#public-info">Public Information</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+      <a href="{{ url_for('login') }}" class="nav-cta">Login</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <div class="eyebrow" style="color:#7dd3fc">Digital Water Services</div>
+      <h1>Smart water billing, usage tracking, and customer service in one platform.</h1>
+      <p>WASCO’s digital platform helps customers monitor usage, view bills, make payments, receive notifications, report service issues, and access water and sewerage services online. The system uses PostgreSQL as the operational database and mirrors key transactions to MySQL to support the distributed database brief.</p>
+      <div class="actions">
+        <a href="{{ url_for('login') }}" class="btn btn-primary">Sign In</a>
+        <a href="#services" class="btn btn-outline">Explore Services</a>
+      </div>
+    </div>
+    <div class="hero-cards">
+      <div class="glass-card"><strong>Active Customers</strong><div class="muted" style="color:#e0f2fe;margin-top:.4rem">{{ public_stats.active_customers }}</div></div>
+      <div class="glass-card"><strong>Branches</strong><div class="muted" style="color:#e0f2fe;margin-top:.4rem">{{ public_stats.branches }}</div></div>
+      <div class="glass-card"><strong>Open Service Reports</strong><div class="muted" style="color:#e0f2fe;margin-top:.4rem">{{ public_stats.open_reports }}</div></div>
+      <div class="glass-card"><strong>Distributed Data</strong><div class="muted" style="color:#e0f2fe;margin-top:.4rem">PostgreSQL + MySQL</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="services"><div class="container"><h2 class="section-title">Services</h2><p class="section-sub">Access the core services available to customers and the public.</p><div class="grid-3"><article class="card service-card"><h3>Water Supply Services</h3><p class="muted">Information for domestic and commercial water supply, account setup, and service access.</p></article><article class="card service-card"><h3>Billing and Payments</h3><p class="muted">View bill information, payment methods, billing cycles, and account balance details.</p></article><article class="card service-card"><h3>Leakage and Incident Reporting</h3><p class="muted">Submit reports for leakages and service problems with faster digital follow-up.</p></article></div></div></section>
+<section class="section" id="features"><div class="container"><h2 class="section-title">Platform Features</h2><p class="section-sub">Built to support customers, administrators, and branch managers.</p><div class="grid-4"><article class="card feature-card"><h3>Customer Portal</h3><p class="muted">Usage history, bill viewing, payment history, notifications, and service reports.</p></article><article class="card feature-card"><h3>Administrative Control</h3><p class="muted">Customer management, billing workflows, payment review, and service notices.</p></article><article class="card feature-card"><h3>Branch Analytics</h3><p class="muted">Operational dashboards for monitoring performance and service trends.</p></article><article class="card feature-card"><h3>Distributed Data Layer</h3><p class="muted">Operational transactions mirrored between PostgreSQL and MySQL.</p></article></div></div></section>
+<section class="section" id="public-info"><div class="container"><h2 class="section-title">Public Information</h2><p class="section-sub">Important information for registered and unregistered customers.</p><div class="grid-3"><article class="card info-card"><h3>Available Services</h3><p class="muted">Browse water supply and sewerage services, service coverage, and digital support channels before creating an account.</p></article><article class="card info-card"><h3>Billing Guidance</h3><p class="muted">Understand rate tiers, billing cycles, payment methods, and how water consumption affects monthly bills.</p></article><article class="card info-card"><h3>Customer Access</h3><p class="muted">Registered customers can sign in to view usage, bills, payments, notifications, and service requests online.</p></article></div></div></section>
+<section class="section" id="about"><div class="container"><div class="card panel"><h2 class="section-title">About the System</h2><p class="muted">This application follows the project brief for a distributed online water bill management system. It manages customer data, billing rates, water usage, bills, payments, notifications, leakage reports, secure user accounts, and cross-database synchronization.</p></div></div></section>
+<section class="section" id="contact"><div class="container grid-3"><div class="card info-card"><h3>Support Email</h3><p class="muted">support@wasco.com</p></div><div class="card info-card"><h3>Phone</h3><p class="muted">+266 5000 0000</p></div><div class="card info-card"><h3>Office Hours</h3><p class="muted">Monday to Friday, 08:00 - 17:00</p></div></div></section>
+<footer class="footer"><div class="container footer-inner"><div>© 2026 WASCO Water Billing System</div><div class="footer-links"><a href="#services">Services</a><a href="#public-info">Public Information</a><a href="#contact">Contact</a></div></div></footer>
+{% endblock %}

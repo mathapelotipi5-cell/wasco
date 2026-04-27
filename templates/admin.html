@@ -1,0 +1,222 @@
+{% extends 'base_app.html' %}
+{% block title %}Admin Dashboard | WASCO{% endblock %}
+{% block mobile_title %}WASCO Admin{% endblock %}
+{% block sidebar_title %}WASCO Admin{% endblock %}
+{% block sidebar_subtitle %}Operations & Billing{% endblock %}
+
+{% block sidebar %}
+<nav class="sidebar-nav">
+  <a class="side-link active" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+  <a class="side-link" href="{{ url_for('billing_rates') }}">Billing Rates</a>
+  <a class="side-link" href="{{ url_for('payments_admin') }}">Payments</a>
+  <a class="side-link" href="{{ url_for('reports') }}">Reports</a>
+  <a class="side-link" href="{{ url_for('users') }}">Users</a>
+  <a class="side-link" href="{{ url_for('db_sync') }}">Database Sync</a>
+</nav>
+{% endblock %}
+
+{% block sidebar_footer %}
+<div class="status-box">
+  <div style="font-weight:800;margin-bottom:.6rem">Environment</div>
+  <div class="status-row"><span>MySQL</span><span class="success">Connected</span></div>
+  <div class="status-row"><span>PostgreSQL</span><span class="success">Connected</span></div>
+  <div class="status-row"><span>Sync Mode</span><span>Dual Write</span></div>
+</div>
+{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1 class="page-title">Admin Dashboard</h1>
+    <div class="muted">
+      Manage customers, billing workflows, payments, notifications, and distributed synchronization.
+    </div>
+  </div>
+  <div>
+    <div id="usernameLabel" style="font-weight:800">{{ current_user.full_name or current_user.username }}</div>
+    <div class="badge">Admin</div>
+  </div>
+</header>
+
+<div class="page-body">
+  <section class="grid-4">
+    <article class="card metric-card">
+      <div class="muted">Registered Customers</div>
+      <div class="value">{{ summary.registered_customers }}</div>
+      <div class="success">Active accounts</div>
+    </article>
+    <article class="card metric-card">
+      <div class="muted">Outstanding Bills</div>
+      <div class="value">{{ summary.outstanding_bills|money }}</div>
+      <div class="warning">Needs follow-up</div>
+    </article>
+    <article class="card metric-card">
+      <div class="muted">Today Payments</div>
+      <div class="value">{{ summary.today_payments|money }}</div>
+      <div class="success">Daily collection</div>
+    </article>
+    <article class="card metric-card">
+      <div class="muted">Open Leak Cases</div>
+      <div class="value">{{ summary.open_leak_cases }}</div>
+      <div class="danger">Needs response</div>
+    </article>
+  </section>
+
+  <section class="section">
+    <div class="grid-3">
+      <div class="card panel" style="grid-column:span 2">
+        <h3 class="panel-title">Quick Actions</h3>
+        <div class="quick-grid">
+          <a class="quick-btn" href="#customer-form">
+            Add Customer
+            <span>Create a new account and register profile details.</span>
+          </a>
+          <a class="quick-btn" href="{{ url_for('billing_rates') }}">
+            Manage Rates
+            <span>Add and review water billing rates.</span>
+          </a>
+          <a class="quick-btn" href="{{ url_for('payments_admin') }}">
+            Record Payment
+            <span>Review transactions and balances.</span>
+          </a>
+          <a class="quick-btn" href="{{ url_for('users') }}">
+            Create User
+            <span>Manage login accounts and roles.</span>
+          </a>
+          <a class="quick-btn" href="{{ url_for('reports') }}">
+            View Reports
+            <span>Open analytical and summary reports.</span>
+          </a>
+          <a class="quick-btn" href="{{ url_for('db_sync') }}">
+            Run Sync Review
+            <span>Inspect distributed activity logs.</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="card panel">
+        <h3 class="panel-title">Administrative Queue</h3>
+        <div class="service-card" style="padding:0">
+          <p>Customer creation, billing updates, payment reconciliation, notices, and sync monitoring are all connected to the real database.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="grid-2">
+      <div class="card panel" id="customer-form">
+        <h3 class="panel-title">Customer Registration</h3>
+
+        <form method="post">
+          <input type="hidden" name="form_name" value="customer">
+
+          <div class="form-grid">
+            <div class="field">
+              <label>Full Name</label>
+              <input class="input" name="full_name" required>
+            </div>
+
+            <div class="field">
+              <label>Account Number</label>
+              <input class="input" name="account_number" required>
+            </div>
+
+            <div class="field">
+              <label>District</label>
+              <input class="input" name="district" required>
+            </div>
+
+            <div class="field">
+              <label>Phone</label>
+              <input class="input" name="phone">
+            </div>
+
+            <div class="field">
+              <label>Email</label>
+              <input class="input" name="email">
+            </div>
+
+            <div class="field">
+              <label>Branch</label>
+              <select class="input" name="branch_id" required>
+                {% for b in branches %}
+                <option value="{{ b.branch_id }}">{{ b.branch_name }} - {{ b.district }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Service Type</label>
+              <select class="input" name="service_type">
+                <option>DOMESTIC</option>
+                <option>COMMERCIAL</option>
+                <option>INDUSTRIAL</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Status</label>
+              <select class="input" name="account_status">
+                <option>ACTIVE</option>
+                <option>PENDING</option>
+                <option>INACTIVE</option>
+                <option>FLAGGED</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Address</label>
+            <input class="input" name="address_line" required>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label>Meter Number</label>
+              <input class="input" name="meter_number">
+            </div>
+
+            <div class="field">
+              <label>Connection Date</label>
+              <input class="input" type="date" name="connection_date">
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Save Customer</button>
+        </form>
+      </div>
+
+      <div class="card panel table-wrap">
+        <h3 class="panel-title">Customer Records</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Name</th>
+              <th>District</th>
+              <th>Phone</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in customers %}
+            <tr>
+              <td>{{ c.account_number }}</td>
+              <td>{{ c.full_name }}</td>
+              <td>{{ c.district }}</td>
+              <td>{{ c.phone or '-' }}</td>
+              <td>
+                <span class="chip {% if c.account_status == 'ACTIVE' %}chip-success{% else %}chip-warning{% endif %}">
+                  {{ c.account_status }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}WASCO{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  <style>
+    .flash-wrap{width:min(1180px,calc(100% - 2rem));margin:1rem auto 0}
+    .flash{padding:1rem 1.1rem;border-radius:16px;border:1px solid var(--line);margin-bottom:.75rem;background:#fff}
+    .flash.success{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+    .flash.warning{border-color:#fde68a;background:#fffbeb;color:#92400e}
+    .flash.danger{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</body>
+</html>

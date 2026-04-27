@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}WASCO{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  <style>
+    .flash-wrap{padding:1rem 1.5rem 0}
+    .flash{padding:1rem 1.1rem;border-radius:16px;border:1px solid var(--line);margin-bottom:.75rem;background:#fff}
+    .flash.success{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+    .flash.warning{border-color:#fde68a;background:#fffbeb;color:#92400e}
+    .flash.danger{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="mobile-top">
+    <div class="brand"><div class="brand-badge">W</div><div><div class="brand-title">{% block mobile_title %}WASCO{% endblock %}</div></div></div>
+    <a class="btn btn-outline-dark" href="{{ url_for('logout') }}">Logout</a>
+  </div>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-badge">W</div><div><div class="brand-title">{% block sidebar_title %}WASCO{% endblock %}</div><div class="brand-sub">{% block sidebar_subtitle %}Platform{% endblock %}</div></div></div>
+      {% block sidebar %}{% endblock %}
+      <div class="sidebar-foot">
+        {% block sidebar_footer %}{% endblock %}
+        <a class="btn btn-primary" style="width:100%" href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
