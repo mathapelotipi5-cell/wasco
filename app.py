@@ -30,7 +30,7 @@ def create_app() -> Flask:
         MYSQL_PORT = int(os.getenv("MYSQL_PORT") or os.getenv("MYSQLPORT", "3306"))
         MYSQL_USER = os.getenv("MYSQL_USER") or os.getenv("MYSQLUSER", "root")
         MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD") or os.getenv("MYSQLPASSWORD", "")
-        MYSQL_DATABASE = os.getenv("MYSQL_DATABASE") or os.getenv("MYSQLDATABASE", "wasco_database")
+        MYSQL_DATABASE = os.getenv("MYSQL_DATABASE") or os.getenv("MYSQLDATABASE", "railway")
 
     class DBService:
         def __init__(self, cfg: DBConfig):
@@ -81,30 +81,55 @@ def create_app() -> Flask:
             return result
 
         def execute_my(self, sql: str, params=None):
+            """Execute one MySQL mirror statement.
+
+            Returns True when the mirror write succeeds. It does not raise to the
+            main app because PostgreSQL is the primary database, but it prints the
+            real error in Railway logs and stores it for sync logging.
+            """
+            self.last_mysql_error = None
+
             if pymysql is None:
+                self.last_mysql_error = "pymysql is not installed. Add pymysql to requirements.txt."
+                print("MYSQL EXECUTE ERROR:", self.last_mysql_error, flush=True)
                 return False
 
+            conn = None
             try:
                 conn = self.my_conn()
                 with conn.cursor() as cur:
                     cur.execute(sql, params or [])
                 conn.commit()
-                conn.close()
                 return True
-            except Exception:
+            except Exception as e:
+                self.last_mysql_error = str(e)
+                print("MYSQL EXECUTE ERROR:", self.last_mysql_error, flush=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 return False
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
         def mirror_insert_sync_log(self, table_name: str, record_id, operation: str, message: str, ok: bool = True):
+            """Write a synchronization log to PostgreSQL and try to mirror it to MySQL."""
             status = "SUCCESS" if ok else "FAILED"
+
+            if not ok and getattr(self, "last_mysql_error", None):
+                message = f"{message} MySQL error: {self.last_mysql_error}"
 
             pg_sql = """
                 INSERT INTO sync_log
                 (table_name, record_id, operation_type, source_db, target_db, sync_status, sync_message)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-
             params = (table_name, record_id, operation, "POSTGRESQL", "MYSQL", status, message)
-
             self.execute_pg(pg_sql, params)
 
             my_sql = """
@@ -117,6 +142,8 @@ def create_app() -> Flask:
         def ping(self):
             pg_ok = False
             mysql_ok = False
+            pg_error = None
+            mysql_error = None
 
             try:
                 with self.pg_conn() as conn:
@@ -124,20 +151,96 @@ def create_app() -> Flask:
                         cur.execute("SELECT 1")
                         cur.fetchone()
                         pg_ok = True
-            except Exception:
+            except Exception as e:
+                pg_error = str(e)
+                print("POSTGRES PING ERROR:", pg_error, flush=True)
                 pg_ok = False
 
+            conn = None
             try:
                 conn = self.my_conn()
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
                     cur.fetchone()
-                conn.close()
                 mysql_ok = True
-            except Exception:
+            except Exception as e:
+                mysql_error = str(e)
+                print("MYSQL PING ERROR:", mysql_error, flush=True)
                 mysql_ok = False
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
-            return {"postgres": pg_ok, "mysql": mysql_ok}
+            return {"postgres": pg_ok, "mysql": mysql_ok, "postgres_error": pg_error, "mysql_error": mysql_error}
+
+        def mysql_upsert_row(self, table_name: str, row: dict, primary_key: str):
+            """Upsert one PostgreSQL row into the MySQL mirror using the same primary key."""
+            if not row:
+                return True
+
+            columns = list(row.keys())
+            quoted_cols = ", ".join(f"`{col}`" for col in columns)
+            placeholders = ", ".join(["%s"] * len(columns))
+            update_cols = [col for col in columns if col != primary_key]
+
+            if update_cols:
+                updates = ", ".join(f"`{col}`=VALUES(`{col}`)" for col in update_cols)
+            else:
+                updates = f"`{primary_key}`=VALUES(`{primary_key}`)"
+
+            sql = f"""
+                INSERT INTO `{table_name}` ({quoted_cols})
+                VALUES ({placeholders})
+                ON DUPLICATE KEY UPDATE {updates}
+            """
+            return self.execute_my(sql, [row[col] for col in columns])
+
+        def sync_all_postgres_to_mysql(self):
+            """Copy current PostgreSQL data into MySQL in foreign-key-safe order."""
+            tables = [
+                ("branches", "branch_id"),
+                ("users", "user_id"),
+                ("customers", "customer_id"),
+                ("billing_rates", "rate_id"),
+                ("water_usage", "usage_id"),
+                ("bills", "bill_id"),
+                ("payments", "payment_id"),
+                ("notifications", "notification_id"),
+                ("leakage_reports", "leakage_id"),
+            ]
+
+            summary = []
+            total_ok = 0
+            total_failed = 0
+
+            for table_name, pk in tables:
+                rows = self.fetch_all(f"SELECT * FROM {table_name} ORDER BY {pk}")
+                ok_count = 0
+                failed_count = 0
+
+                for row in rows:
+                    if self.mysql_upsert_row(table_name, dict(row), pk):
+                        ok_count += 1
+                    else:
+                        failed_count += 1
+
+                total_ok += ok_count
+                total_failed += failed_count
+                summary.append(f"{table_name}: {ok_count} synced, {failed_count} failed")
+
+            ok = total_failed == 0
+            message = "; ".join(summary)
+            self.mirror_insert_sync_log(
+                "ALL_TABLES",
+                0,
+                "SYNC",
+                f"Manual PostgreSQL to MySQL sync completed. {message}",
+                ok=ok,
+            )
+            return {"ok": ok, "synced": total_ok, "failed": total_failed, "message": message}
 
         def authenticate(self, username: str, password: str):
             user = self.fetch_one(
@@ -458,12 +561,20 @@ def create_app() -> Flask:
                 fetchone=True,
             )
 
-            self.execute_my(
+            my_ok = self.execute_my(
                 """
-                INSERT INTO users (full_name, username, email, password_hash, role, status)
-                VALUES (%s,%s,%s,%s,%s,%s)
+                INSERT INTO users (user_id, full_name, username, email, password_hash, role, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    full_name=VALUES(full_name),
+                    username=VALUES(username),
+                    email=VALUES(email),
+                    password_hash=VALUES(password_hash),
+                    role=VALUES(role),
+                    status=VALUES(status)
                 """,
                 [
+                    row["user_id"],
                     form["full_name"],
                     form["username"],
                     form.get("email") or None,
@@ -473,7 +584,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("users", row["user_id"], "INSERT", "User account created and mirrored.")
+            self.mirror_insert_sync_log("users", row["user_id"], "INSERT", "User account created and mirrored.", ok=my_ok)
 
         def create_customer(self, form, admin_user_id: int | None = None):
             row = self.execute_pg(
@@ -502,15 +613,29 @@ def create_app() -> Flask:
                 fetchone=True,
             )
 
-            self.execute_my(
+            my_ok = self.execute_my(
                 """
                 INSERT INTO customers (
-                    account_number, user_id, branch_id, full_name, phone, email,
+                    customer_id, account_number, user_id, branch_id, full_name, phone, email,
                     address_line, district, service_type, meter_number, connection_date, account_status
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    account_number=VALUES(account_number),
+                    user_id=VALUES(user_id),
+                    branch_id=VALUES(branch_id),
+                    full_name=VALUES(full_name),
+                    phone=VALUES(phone),
+                    email=VALUES(email),
+                    address_line=VALUES(address_line),
+                    district=VALUES(district),
+                    service_type=VALUES(service_type),
+                    meter_number=VALUES(meter_number),
+                    connection_date=VALUES(connection_date),
+                    account_status=VALUES(account_status)
                 """,
                 [
+                    row["customer_id"],
                     form["account_number"],
                     form.get("user_id") or None,
                     form["branch_id"],
@@ -526,7 +651,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("customers", row["customer_id"], "INSERT", "Customer created and mirrored.")
+            self.mirror_insert_sync_log("customers", row["customer_id"], "INSERT", "Customer created and mirrored.", ok=my_ok)
 
             if admin_user_id:
                 self.execute_pg(
@@ -565,15 +690,26 @@ def create_app() -> Flask:
                 fetchone=True,
             )
 
-            self.execute_my(
+            my_ok = self.execute_my(
                 """
                 INSERT INTO billing_rates (
-                    service_type, rate_tier, min_units, max_units, cost_per_unit,
+                    rate_id, service_type, rate_tier, min_units, max_units, cost_per_unit,
                     fixed_charge, effective_from, effective_to, status
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    service_type=VALUES(service_type),
+                    rate_tier=VALUES(rate_tier),
+                    min_units=VALUES(min_units),
+                    max_units=VALUES(max_units),
+                    cost_per_unit=VALUES(cost_per_unit),
+                    fixed_charge=VALUES(fixed_charge),
+                    effective_from=VALUES(effective_from),
+                    effective_to=VALUES(effective_to),
+                    status=VALUES(status)
                 """,
                 [
+                    row["rate_id"],
                     form["service_type"].upper(),
                     form["rate_tier"],
                     form["min_units"],
@@ -586,7 +722,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("billing_rates", row["rate_id"], "INSERT", "Billing rate created and mirrored.")
+            self.mirror_insert_sync_log("billing_rates", row["rate_id"], "INSERT", "Billing rate created and mirrored.", ok=my_ok)
 
         def create_leakage_report(self, form, customer_id=None):
             row = self.execute_pg(
@@ -609,15 +745,24 @@ def create_app() -> Flask:
                 fetchone=True,
             )
 
-            self.execute_my(
+            my_ok = self.execute_my(
                 """
                 INSERT INTO leakage_reports (
-                    customer_id, district, location_description, report_description,
+                    leakage_id, customer_id, district, location_description, report_description,
                     priority, report_status, assigned_branch_id
                 )
-                VALUES (%s,%s,%s,%s,%s,'OPEN',%s)
+                VALUES (%s,%s,%s,%s,%s,%s,'OPEN',%s)
+                ON DUPLICATE KEY UPDATE
+                    customer_id=VALUES(customer_id),
+                    district=VALUES(district),
+                    location_description=VALUES(location_description),
+                    report_description=VALUES(report_description),
+                    priority=VALUES(priority),
+                    report_status=VALUES(report_status),
+                    assigned_branch_id=VALUES(assigned_branch_id)
                 """,
                 [
+                    row["leakage_id"],
                     customer_id,
                     form["district"],
                     form["location_description"],
@@ -632,6 +777,7 @@ def create_app() -> Flask:
                 row["leakage_id"],
                 "INSERT",
                 "Leakage report created and mirrored.",
+                ok=my_ok,
             )
 
         def create_payment(self, form, admin_user_id: int):
@@ -662,15 +808,25 @@ def create_app() -> Flask:
                 fetchone=True,
             )
 
-            self.execute_my(
+            my_payment_ok = self.execute_my(
                 """
                 INSERT INTO payments (
-                    bill_id, customer_id, receipt_number, amount_paid,
+                    payment_id, bill_id, customer_id, receipt_number, amount_paid,
                     payment_method, payment_reference, payment_status, recorded_by
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    bill_id=VALUES(bill_id),
+                    customer_id=VALUES(customer_id),
+                    receipt_number=VALUES(receipt_number),
+                    amount_paid=VALUES(amount_paid),
+                    payment_method=VALUES(payment_method),
+                    payment_reference=VALUES(payment_reference),
+                    payment_status=VALUES(payment_status),
+                    recorded_by=VALUES(recorded_by)
                 """,
                 [
+                    row["payment_id"],
                     form["bill_id"],
                     bill["customer_id"],
                     form["receipt_number"],
@@ -703,7 +859,7 @@ def create_app() -> Flask:
                 [new_status, form["bill_id"]],
             )
 
-            self.execute_my(
+            my_bill_update_ok = self.execute_my(
                 "UPDATE bills SET payment_status = %s WHERE bill_id = %s",
                 [new_status, form["bill_id"]],
             )
@@ -724,7 +880,13 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("payments", row["payment_id"], "INSERT", "Payment created and mirrored.")
+            self.mirror_insert_sync_log(
+                "payments",
+                row["payment_id"],
+                "INSERT",
+                "Payment created and mirrored.",
+                ok=(my_payment_ok and my_bill_update_ok),
+            )
 
     db = DBService(DBConfig)
 
@@ -1087,6 +1249,21 @@ def create_app() -> Flask:
         )
 
         return render_template("db-sync.html", environments=environments, sync_logs=sync_logs)
+
+    @app.post("/admin/db-sync/sync-now")
+    @login_required
+    @role_required("ADMIN")
+    def db_sync_now():
+        try:
+            result = db.sync_all_postgres_to_mysql()
+            if result["ok"]:
+                flash(f"Manual sync completed: {result['synced']} records copied to MySQL.", "success")
+            else:
+                flash(f"Manual sync finished with errors: {result['failed']} failures. Check Railway logs and sync log.", "warning")
+        except Exception as exc:
+            print("MANUAL SYNC ERROR:", str(exc), flush=True)
+            flash(f"Manual sync failed: {exc}", "danger")
+        return redirect(url_for("db_sync"))
 
     @app.errorhandler(403)
     def forbidden(_e):
