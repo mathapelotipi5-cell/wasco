@@ -1,41 +1,33 @@
-# WASCO Flask System
+# WASCO Online Water Billing Management System
 
-A real Flask-based version of the WASCO water billing system built from the UI screens and aligned to the distributed database project brief.
+A production-ready Flask application for customer water billing, payments, service reporting, administrative management, and operational monitoring.
 
-## Features
-- Public home page
-- Secure login using the `users` table
-- Role-based dashboards for Admin, Customer, and Branch Manager
-- Customer registration
-- Billing rate management
-- Payment recording and balance updates
-- Customer notifications
-- Leakage reporting
-- Reports and summaries
-- PostgreSQL primary database with MySQL mirror writes for selected transactions
-- Sync log monitoring
+## Main Features
+- Customer portal for bills, usage history, notifications, and leakage reports
+- Administrator dashboard for customers, users, billing rates, payments, and reports
+- Manager dashboard for service and revenue insights
+- Primary cloud database connection through environment variables
+- Optional backup database support for service continuity
 
-## Databases
-The app is configured for these defaults:
-- MySQL database: `wasco_database`
-- MySQL password: `123456`
-- PostgreSQL database: `wasco_water_billing`
-- PostgreSQL password: `12345`
+## Railway Start Command
+```bash
+gunicorn app:app
+```
 
-## Setup
-1. Create the databases in MySQL and PostgreSQL.
-2. Run the reset schema and demo data files from the `sql/` folder.
-3. Create a virtual environment and install dependencies:
-   - `pip install -r requirements.txt`
-4. Optionally copy `.env.example` to `.env` and adjust values.
-5. Run the app:
-   - `python app.py`
-6. Open `http://127.0.0.1:5000`
+## Required Environment Variables
+```env
+DATABASE_URL=your_primary_database_url
+SECRET_KEY=your_secret_key
+```
 
-## Suggested Login Accounts
-Use records from the `users` table in your seeded PostgreSQL database. The app checks the selected role against the stored role.
+## Optional Backup Database Variables
+```env
+MYSQL_HOST=your_backup_host
+MYSQL_PORT=3306
+MYSQL_USER=your_backup_user
+MYSQL_PASSWORD=your_backup_password
+MYSQL_DATABASE=your_backup_database
+```
 
-## Important Notes
-- PostgreSQL is used as the operational database.
-- MySQL is used as the mirror database for distributed functionality.
-- If MySQL is unavailable, the Flask app still keeps the primary PostgreSQL workflow running and logs can continue in PostgreSQL.
+## Requirements
+Install packages from `requirements.txt`.

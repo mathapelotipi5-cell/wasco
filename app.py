@@ -1,4 +1,5 @@
 import os
+import logging
 from functools import wraps
 from decimal import Decimal
 from datetime import date, datetime
@@ -8,6 +9,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
     import pymysql
@@ -38,7 +42,7 @@ def create_app() -> Flask:
 
         def pg_conn(self):
             if not self.cfg.DATABASE_URL:
-                raise RuntimeError("DATABASE_URL is not set. Add Supabase DATABASE_URL in Railway Variables.")
+                raise RuntimeError("Primary database connection is not configured.")
 
             db_url = self.cfg.DATABASE_URL
 
@@ -50,7 +54,7 @@ def create_app() -> Flask:
 
         def my_conn(self):
             if pymysql is None:
-                raise RuntimeError("pymysql is not installed. Add pymysql to requirements.txt if using MySQL.")
+                raise RuntimeError("Backup database driver is not available.")
 
             return pymysql.connect(
                 host=self.cfg.MYSQL_HOST,
@@ -90,8 +94,8 @@ def create_app() -> Flask:
             self.last_mysql_error = None
 
             if pymysql is None:
-                self.last_mysql_error = "pymysql is not installed. Add pymysql to requirements.txt."
-                print("MYSQL EXECUTE ERROR:", self.last_mysql_error, flush=True)
+                self.last_mysql_error = "Backup database driver is not available."
+                logger.error("Backup database write failed: driver unavailable")
                 return False
 
             conn = None
@@ -103,7 +107,7 @@ def create_app() -> Flask:
                 return True
             except Exception as e:
                 self.last_mysql_error = str(e)
-                print("MYSQL EXECUTE ERROR:", self.last_mysql_error, flush=True)
+                logger.error("Backup database write failed: %s", self.last_mysql_error)
                 if conn:
                     try:
                         conn.rollback()
@@ -122,14 +126,15 @@ def create_app() -> Flask:
             status = "SUCCESS" if ok else "FAILED"
 
             if not ok and getattr(self, "last_mysql_error", None):
-                message = f"{message} MySQL error: {self.last_mysql_error}"
+                logger.error("Mirror operation failed for %s record %s: %s", table_name, record_id, self.last_mysql_error)
+                message = "Operation saved, but backup synchronization needs attention."
 
             pg_sql = """
                 INSERT INTO sync_log
                 (table_name, record_id, operation_type, source_db, target_db, sync_status, sync_message)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            params = (table_name, record_id, operation, "POSTGRESQL", "MYSQL", status, message)
+            params = (table_name, record_id, operation, "PRIMARY", "BACKUP", status, message)
             self.execute_pg(pg_sql, params)
 
             my_sql = """
@@ -153,7 +158,7 @@ def create_app() -> Flask:
                         pg_ok = True
             except Exception as e:
                 pg_error = str(e)
-                print("POSTGRES PING ERROR:", pg_error, flush=True)
+                logger.error("Primary database health check failed: %s", pg_error)
                 pg_ok = False
 
             conn = None
@@ -165,7 +170,7 @@ def create_app() -> Flask:
                 mysql_ok = True
             except Exception as e:
                 mysql_error = str(e)
-                print("MYSQL PING ERROR:", mysql_error, flush=True)
+                logger.error("Backup database health check failed: %s", mysql_error)
                 mysql_ok = False
             finally:
                 if conn:
@@ -237,7 +242,7 @@ def create_app() -> Flask:
                 "ALL_TABLES",
                 0,
                 "SYNC",
-                f"Manual PostgreSQL to MySQL sync completed. {message}",
+                "System synchronization completed.",
                 ok=ok,
             )
             return {"ok": ok, "synced": total_ok, "failed": total_failed, "message": message}
@@ -584,7 +589,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("users", row["user_id"], "INSERT", "User account created and mirrored.", ok=my_ok)
+            self.mirror_insert_sync_log("users", row["user_id"], "INSERT", "User account created successfully.", ok=my_ok)
 
         def create_customer(self, form, admin_user_id: int | None = None):
             row = self.execute_pg(
@@ -651,7 +656,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("customers", row["customer_id"], "INSERT", "Customer created and mirrored.", ok=my_ok)
+            self.mirror_insert_sync_log("customers", row["customer_id"], "INSERT", "Customer record saved successfully.", ok=my_ok)
 
             if admin_user_id:
                 self.execute_pg(
@@ -722,7 +727,7 @@ def create_app() -> Flask:
                 ],
             )
 
-            self.mirror_insert_sync_log("billing_rates", row["rate_id"], "INSERT", "Billing rate created and mirrored.", ok=my_ok)
+            self.mirror_insert_sync_log("billing_rates", row["rate_id"], "INSERT", "Billing rate saved successfully.", ok=my_ok)
 
         def create_leakage_report(self, form, customer_id=None):
             row = self.execute_pg(
@@ -776,7 +781,7 @@ def create_app() -> Flask:
                 "leakage_reports",
                 row["leakage_id"],
                 "INSERT",
-                "Leakage report created and mirrored.",
+                "Service report submitted successfully.",
                 ok=my_ok,
             )
 
@@ -884,7 +889,7 @@ def create_app() -> Flask:
                 "payments",
                 row["payment_id"],
                 "INSERT",
-                "Payment created and mirrored.",
+                "Payment recorded successfully.",
                 ok=(my_payment_ok and my_bill_update_ok),
             )
 
@@ -946,6 +951,33 @@ def create_app() -> Flask:
             return value.strftime(fmt)
 
         return str(value)
+
+
+    @app.template_filter("friendly_area")
+    def friendly_area(value):
+        labels = {
+            "users": "User Accounts",
+            "customers": "Customers",
+            "billing_rates": "Billing Rates",
+            "water_usage": "Water Usage",
+            "bills": "Bills",
+            "payments": "Payments",
+            "notifications": "Notifications",
+            "leakage_reports": "Service Reports",
+            "branches": "Branches",
+            "ALL_TABLES": "System Data",
+        }
+        return labels.get(str(value), str(value).replace("_", " ").title())
+
+    @app.template_filter("friendly_operation")
+    def friendly_operation(value):
+        labels = {
+            "INSERT": "Saved",
+            "UPDATE": "Updated",
+            "DELETE": "Removed",
+            "SYNC": "Checked",
+        }
+        return labels.get(str(value), str(value).title())
 
     @app.get("/")
     def home():
@@ -1257,12 +1289,12 @@ def create_app() -> Flask:
         try:
             result = db.sync_all_postgres_to_mysql()
             if result["ok"]:
-                flash(f"Manual sync completed: {result['synced']} records copied to MySQL.", "success")
+                flash("System data check completed successfully.", "success")
             else:
-                flash(f"Manual sync finished with errors: {result['failed']} failures. Check Railway logs and sync log.", "warning")
+                flash("System data check completed with items needing attention.", "warning")
         except Exception as exc:
             print("MANUAL SYNC ERROR:", str(exc), flush=True)
-            flash(f"Manual sync failed: {exc}", "danger")
+            flash("System data check could not be completed. Please try again.", "danger")
         return redirect(url_for("db_sync"))
 
     @app.errorhandler(403)
@@ -1280,4 +1312,4 @@ app = create_app()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)

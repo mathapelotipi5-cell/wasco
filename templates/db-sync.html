@@ -1,10 +1,93 @@
 {% extends 'base_app.html' %}
-{% block title %}Database Sync | WASCO{% endblock %}
-{% block mobile_title %}Database Sync{% endblock %}
-{% block sidebar_title %}WASCO Data Layer{% endblock %}
-{% block sidebar_subtitle %}Distributed Operations{% endblock %}
-{% block sidebar %}<nav class="sidebar-nav"><a class="side-link" href="{{ url_for('admin_dashboard') }}">Dashboard</a><a class="side-link" href="{{ url_for('billing_rates') }}">Billing Rates</a><a class="side-link" href="{{ url_for('payments_admin') }}">Payments</a><a class="side-link" href="{{ url_for('reports') }}">Reports</a><a class="side-link" href="{{ url_for('users') }}">Users</a><a class="side-link active" href="{{ url_for('db_sync') }}">Database Sync</a></nav>{% endblock %}
+{% block title %}System Status | WASCO{% endblock %}
+{% block mobile_title %}System Status{% endblock %}
+{% block sidebar_title %}WASCO Operations{% endblock %}
+{% block sidebar_subtitle %}System Monitoring{% endblock %}
+{% block sidebar %}
+<nav class="sidebar-nav">
+  <a class="side-link" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+  <a class="side-link" href="{{ url_for('billing_rates') }}">Billing Rates</a>
+  <a class="side-link" href="{{ url_for('payments_admin') }}">Payments</a>
+  <a class="side-link" href="{{ url_for('reports') }}">Reports</a>
+  <a class="side-link" href="{{ url_for('users') }}">Users</a>
+  <a class="side-link active" href="{{ url_for('db_sync') }}">System Status</a>
+</nav>
+{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1 class="page-title">Database Synchronization</h1><div class="muted">Monitor mirrored operations between PostgreSQL and MySQL environments.</div></div><div style="text-align:right"><div style="font-weight:800">{{ current_user.full_name or current_user.username }}</div><div class="badge">Admin</div><form method="post" action="{{ url_for('db_sync_now') }}" style="margin-top:10px"><button class="btn btn-primary" type="submit">Sync PostgreSQL → MySQL</button></form></div></header>
-<div class="page-body"><section class="grid-3"><article class="card panel"><h3 class="panel-title">PostgreSQL Environment</h3><div class="status-row"><span>Connection</span><span class="{{ 'success' if environments.postgres else 'danger' }}">{{ 'Connected' if environments.postgres else 'Unavailable' }}</span></div><div class="status-row"><span>Write Mode</span><span>Primary</span></div><div class="status-row"><span>Database</span><span>wasco_water_billing</span></div></article><article class="card panel"><h3 class="panel-title">MySQL Environment</h3><div class="status-row"><span>Connection</span><span class="{{ 'success' if environments.mysql else 'danger' }}">{{ 'Connected' if environments.mysql else 'Unavailable' }}</span></div>{% if environments.mysql_error %}<div class="status-row"><span>Error</span><span class="danger" style="font-size:12px; text-align:right; max-width:220px">{{ environments.mysql_error }}</span></div>{% endif %}<div class="status-row"><span>Write Mode</span><span>Mirror</span></div><div class="status-row"><span>Database</span><span>wasco_database</span></div></article><article class="card panel"><h3 class="panel-title">Sync Engine</h3><div class="status-row"><span>Status</span><span class="success">Healthy</span></div><div class="status-row"><span>Mode</span><span>Dual Write</span></div><div class="status-row"><span>Application</span><span>Flask</span></div></article></section><section class="section"><div class="card panel table-wrap"><h3 class="panel-title">Synchronization Log</h3><table class="table"><thead><tr><th>Table</th><th>Record</th><th>Operation</th><th>Source</th><th>Target</th><th>Status</th><th>Message</th><th>Time</th></tr></thead><tbody>{% for row in sync_logs %}<tr><td>{{ row.table_name }}</td><td>{{ row.record_id }}</td><td>{{ row.operation_type }}</td><td>{{ row.source_db }}</td><td>{{ row.target_db }}</td><td><span class="chip {% if row.sync_status == 'SUCCESS' %}chip-success{% elif row.sync_status == 'FAILED' %}chip-danger{% else %}chip-warning{% endif %}">{{ row.sync_status }}</span></td><td>{{ row.sync_message }}</td><td>{{ row.synced_at|datefmt('%Y-%m-%d %H:%M') }}</td></tr>{% endfor %}</tbody></table></div></section><section class="section"><div class="grid-2"><div class="card panel"><h3 class="panel-title">Stored Copies and Fragments</h3><div class="service-card" style="padding:0"><p>Customer and billing data are mirrored across PostgreSQL and MySQL.</p><p>Operational transactions remain readable from the primary PostgreSQL store.</p><p>The sync log records cross-database operations for review and reporting.</p></div></div><div class="card panel"><h3 class="panel-title">Operational Notes</h3><div class="service-card" style="padding:0"><p>Primary writes are validated in PostgreSQL before mirror writes are attempted in MySQL.</p><p>Failures in the mirror do not block the main application, but they are visible in operational monitoring.</p><p>This supports the heterogeneous distributed database requirement from the brief.</p></div></div></div></section></div>
+<header class="page-header">
+  <div>
+    <h1 class="page-title">System Status</h1>
+    <div class="muted">Monitor application readiness and data consistency.</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-weight:800">{{ current_user.full_name or current_user.username }}</div>
+    <div class="badge">Admin</div>
+    <form method="post" action="{{ url_for('db_sync_now') }}" style="margin-top:10px">
+      <button class="btn btn-primary" type="submit">Run System Check</button>
+    </form>
+  </div>
+</header>
+
+<div class="page-body">
+  <section class="grid-3">
+    <article class="card panel">
+      <h3 class="panel-title">Main Service</h3>
+      <div class="status-row"><span>Status</span><span class="{{ 'success' if environments.postgres else 'danger' }}">{{ 'Online' if environments.postgres else 'Needs attention' }}</span></div>
+      <div class="status-row"><span>Mode</span><span>Active</span></div>
+    </article>
+
+    <article class="card panel">
+      <h3 class="panel-title">Backup Service</h3>
+      <div class="status-row"><span>Status</span><span class="{{ 'success' if environments.mysql else 'danger' }}">{{ 'Online' if environments.mysql else 'Needs attention' }}</span></div>
+      <div class="status-row"><span>Mode</span><span>Standby</span></div>
+    </article>
+
+    <article class="card panel">
+      <h3 class="panel-title">Data Protection</h3>
+      <div class="status-row"><span>Status</span><span class="success">Active</span></div>
+      <div class="status-row"><span>Monitoring</span><span>Enabled</span></div>
+    </article>
+  </section>
+
+  <section class="section">
+    <div class="card panel table-wrap">
+      <h3 class="panel-title">Activity Log</h3>
+      <table class="table">
+        <thead>
+          <tr><th>Area</th><th>Action</th><th>Status</th><th>Note</th><th>Time</th></tr>
+        </thead>
+        <tbody>
+          {% for row in sync_logs %}
+          <tr>
+            <td>{{ row.table_name|friendly_area }}</td>
+            <td>{{ row.operation_type|friendly_operation }}</td>
+            <td><span class="chip {% if row.sync_status == 'SUCCESS' %}chip-success{% elif row.sync_status == 'FAILED' %}chip-danger{% else %}chip-warning{% endif %}">{{ 'Completed' if row.sync_status == 'SUCCESS' else 'Needs Attention' if row.sync_status == 'FAILED' else row.sync_status }}</span></td>
+            <td>{{ row.sync_message }}</td>
+            <td>{{ row.synced_at|datefmt('%Y-%m-%d %H:%M') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="grid-2">
+      <div class="card panel">
+        <h3 class="panel-title">Service Continuity</h3>
+        <div class="service-card" style="padding:0">
+          <p>Customer, billing, and payment records are protected through the system backup process.</p>
+          <p>Administrators can run checks to confirm that important records are available when needed.</p>
+        </div>
+      </div>
+      <div class="card panel">
+        <h3 class="panel-title">Operational Notes</h3>
+        <div class="service-card" style="padding:0">
+          <p>Main operations continue even when the backup service needs attention.</p>
+          <p>Any item needing review is shown in the activity log for the administrator.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
 {% endblock %}

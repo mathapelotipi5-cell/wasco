@@ -11,16 +11,16 @@
   <a class="side-link" href="{{ url_for('payments_admin') }}">Payments</a>
   <a class="side-link" href="{{ url_for('reports') }}">Reports</a>
   <a class="side-link" href="{{ url_for('users') }}">Users</a>
-  <a class="side-link" href="{{ url_for('db_sync') }}">Database Sync</a>
+  <a class="side-link" href="{{ url_for('db_sync') }}">System Status</a>
 </nav>
 {% endblock %}
 
 {% block sidebar_footer %}
 <div class="status-box">
-  <div style="font-weight:800;margin-bottom:.6rem">Environment</div>
-  <div class="status-row"><span>MySQL</span><span class="success">Connected</span></div>
-  <div class="status-row"><span>PostgreSQL</span><span class="success">Connected</span></div>
-  <div class="status-row"><span>Sync Mode</span><span>Dual Write</span></div>
+  <div style="font-weight:800;margin-bottom:.6rem">System</div>
+  <div class="status-row"><span>Backup Service</span><span class="success">Connected</span></div>
+  <div class="status-row"><span>Main Service</span><span class="success">Connected</span></div>
+  <div class="status-row"><span>Protection Mode</span><span>Protected</span></div>
 </div>
 {% endblock %}
 
@@ -29,7 +29,7 @@
   <div>
     <h1 class="page-title">Admin Dashboard</h1>
     <div class="muted">
-      Manage customers, billing workflows, payments, notifications, and distributed synchronization.
+      Manage customers, billing workflows, payments, notifications, and system monitoring.
     </div>
   </div>
   <div>
@@ -97,7 +97,7 @@
       <div class="card panel">
         <h3 class="panel-title">Administrative Queue</h3>
         <div class="service-card" style="padding:0">
-          <p>Customer creation, billing updates, payment reconciliation, notices, and sync monitoring are all connected to the real database.</p>
+          <p>Customer creation, billing updates, payment reconciliation, notices, and system monitoring are all connected to the live system.</p>
         </div>
       </div>
     </div>
